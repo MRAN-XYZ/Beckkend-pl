@@ -1,43 +1,31 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
-const fs = require('fs');
+const fs = require('fs').promises; // Use promises
 const path = require('path');
-const cors = require('cors'); // Import CORS untuk memungkinkan permintaan dari domain berbeda
+const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3030; // Gunakan port dari environment variable atau 3030 jika tidak ada
+const PORT = process.env.PORT || 3030;
+const usersFilePath = path.join(__dirname, 'users.json');
 
 // Middleware
 app.use(bodyParser.json());
-app.use(cors()); // Mengizinkan semua origin untuk berkomunikasi dengan server
-
-// Path ke file users.json
-const usersFilePath = path.join(__dirname, 'users.json');
+app.use(cors());
 
 // Sign-up route
-app.post('/signup', (req, res) => {
+app.post('/signup', async (req, res) => {
     const { username, email, password } = req.body;
 
     // Validasi input
     if (!username || !email || !password) {
-        console.log('Missing fields in signup');
         return res.status(400).json({ message: 'Username, email, and password are required' });
     }
 
-    // Load users
-    fs.readFile(usersFilePath, 'utf8', (err, data) => {
-        if (err) {
-            console.log('Error reading user data:', err);
-            return res.status(500).json({ message: 'Error reading user data' });
-        }
+    try {
+        const data = await fs.readFile(usersFilePath, 'utf8');
+        const users = data ? JSON.parse(data) : [];
 
-        let users = [];
-
-        if (data) {
-            users = JSON.parse(data); // Parse jika ada data
-        }
-        
         // Cek jika username sudah ada
         if (users.find(user => user.username === username)) {
             return res.status(400).json({ message: 'Username already exists' });
@@ -45,58 +33,45 @@ app.post('/signup', (req, res) => {
 
         // Hash password
         const hashedPassword = bcrypt.hashSync(password, 10);
-        
-        // Tambahkan user baru
         users.push({ username, email, password: hashedPassword });
 
         // Simpan ke users.json
-        fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), (err) => {
-            if (err) {
-                console.log('Error saving user data:', err);
-                return res.status(500).json({ message: 'Error saving user data' });
-            }
-            console.log('User created successfully:', username);
-            res.status(201).json({ message: 'User created successfully' });
-        });
-    });
+        await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+        res.status(201).json({ message: 'User created successfully' });
+    } catch (err) {
+        console.error('Error reading or saving user data:', err);
+        res.status(500).json({ message: 'Error processing user data' });
+    }
 });
 
 // Login route
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     // Validasi input
     if (!username || !password) {
-        console.log('Missing username or password');
         return res.status(400).json({ message: 'Username and password are required' });
     }
 
-    // Load users
-    fs.readFile(usersFilePath, 'utf8', (err, data) => {
-        if (err) {
-            console.log('Error reading user data:', err);
-            return res.status(500).json({ message: 'Error reading user data' });
-        }
-
+    try {
+        const data = await fs.readFile(usersFilePath, 'utf8');
         const users = JSON.parse(data);
-        
-        // Cari user berdasarkan username
+
         const user = users.find(user => user.username === username);
         if (!user) {
-            console.log('User not found:', username);
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // Bandingkan password
         const isPasswordValid = bcrypt.compareSync(password, user.password);
         if (!isPasswordValid) {
-            console.log('Invalid password for user:', username);
             return res.status(401).json({ message: 'Invalid password.' });
         }
 
-        console.log('Login successful for user:', username);
         res.status(200).json({ message: 'Login successful.' });
-    });
+    } catch (err) {
+        console.error('Error reading user data:', err);
+        res.status(500).json({ message: 'Error reading user data' });
+    }
 });
 
 // Start server
