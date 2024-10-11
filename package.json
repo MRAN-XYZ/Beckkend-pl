@@ -4,7 +4,7 @@
   "description": "This application lets you easily create an account and log in for testing purposes",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js" // More common start script
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
